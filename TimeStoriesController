@@ -1,37 +1,48 @@
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
-public class TimeStoriesController {
+class TimeStoriesController {
 
-    private List<Story> getLatestTimeStories() throws IOException {
-        String timeUrl = "https://time.com";
-       
-     Document doc = Jsoup.connect(timeUrl).get();
-        Elements storyElements   = doc.select("a[class^=headline]");
-        List<Story> stories=  new ArrayList<>();
-        int count =0;
+       private List<Story> getLatestTimeStories() throws IOException {
+            String timeUrl = "https://time.com";
+          URL url = new URL(timeUrl);
+          HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+        BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+           StringBuilder response = new StringBuilder();
+          String line;
+         while ((line = reader.readLine()) != null) {
+            response.append(line);
+         }
+                     reader.close();
 
-        for (Element element : storyElements) {
-            String title = element.text();
-            String link= element.absUrl("href");
+        String regexPattern = "<a href=\"(https://time.com/\\d+/[^\"]+)\">([^<]+)</a>";
+          Pattern pattern = Pattern.compile(regexPattern);
+         Matcher matcher = pattern.matcher(response.toString());
+              List<Story> stories = new ArrayList<>();
+        int count = 0;
+         
+           while (matcher.find() && count < 6) {
+            String link = matcher.group(1);
+              String title =matcher.group(2);
             stories.add(new Story(title, link));
-            count++;
-            if (count >= 6) {
-                break;
-            }
+             count++;
         }
-        return stories;
+        return   stories;
     }
 
     @GetMapping("/getTimeStories")
@@ -40,6 +51,7 @@ public class TimeStoriesController {
             List<Story> stories = getLatestTimeStories();
             return ResponseEntity.ok(stories);
         } catch (IOException e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
